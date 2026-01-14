@@ -251,26 +251,14 @@
 
     // ========= Carregamento de imagens =========
     const imgMari = new Image();
-    imgMari.src = "mari.jpeg";
-    const imgBruna = new Image();
-    imgBruna.src = "bruna.jpeg";
-    
-    // Imagens dos personagens da intro
-    const imgPietro = new Image();
-    imgPietro.src = "pietro.png";
-    const imgMatheus = new Image();
-    imgMatheus.src = "Matheus.png";
-    const imgBeatriz = new Image();
-    imgBeatriz.src = "Beatriz.png";
-    
-    // Imagem da máquina
-    const imgMachine = new Image();
-    imgMachine.src = "máquina.png";
-    imgMachine.onerror = () => { imgMachine.src = "maquina.png"; };
+    imgMari.decoding = "async";
+    imgMari.loading = "eager";
+    let mariReady = false;
     
     // Canvas temporário para processar imagem da Mari (remover fundo preto)
     let processedMari = null;
     imgMari.onload = function() {
+      mariReady = true;
       const tempCanvas = document.createElement("canvas");
       const tempCtx = tempCanvas.getContext("2d");
       tempCanvas.width = imgMari.width;
@@ -303,6 +291,24 @@
       tempCtx.putImageData(imageData, 0, 0);
       processedMari = tempCanvas;
     };
+    imgMari.onerror = () => { mariReady = false; };
+    imgMari.src = "Mari.jpeg";
+    
+    const imgBruna = new Image();
+    imgBruna.src = "bruna.jpeg";
+    
+    // Imagens dos personagens da intro
+    const imgPietro = new Image();
+    imgPietro.src = "pietro.png";
+    const imgMatheus = new Image();
+    imgMatheus.src = "Matheus.png";
+    const imgBeatriz = new Image();
+    imgBeatriz.src = "Beatriz.png";
+    
+    // Imagem da máquina
+    const imgMachine = new Image();
+    imgMachine.src = "máquina.png";
+    imgMachine.onerror = () => { imgMachine.src = "maquina.png"; };
 
     // ========= Estado do jogo =========
     const state = {
@@ -778,12 +784,14 @@
       }
     }
 
-    // Helper para desenhar imagem como "cover" dentro de um círculo (sem distorção)
-    function drawImageCoverCircle(img, cx, cy, r) {
-      if (!img || !img.complete || img.naturalWidth <= 0) return false;
+    // Helper robusto para desenhar imagem como "cover" dentro de um círculo (sem distorção)
+    function drawImageCoverCircle(ctx, img, cx, cy, r) {
+      if (!img) return false;
       
-      const iw = img.naturalWidth;
-      const ih = img.naturalHeight;
+      const iw = img.naturalWidth || 0;
+      const ih = img.naturalHeight || 0;
+      if (!(iw > 0 && ih > 0)) return false;
+      
       const scale = Math.max((2*r)/iw, (2*r)/ih);
       const sw = (2*r)/scale;
       const sh = (2*r)/scale;
@@ -858,37 +866,42 @@
       ctx.fill();
 
       // Mari cabeça no cockpit
-      const cx = 6;
-      const cy = -12;
-      const r = 14; // Raio do círculo (ajustado para o tamanho atual)
+      const cockX = 8;
+      const cockY = -8;
+      const cockR = 16;
       
       ctx.save();
       
       // Espelha horizontalmente para ela olhar para o lado (esquerda/nariz do avião)
-      ctx.translate(cx, cy);
+      ctx.translate(cockX, cockY);
       ctx.scale(-1, 1); // espelha horizontalmente
-      ctx.translate(-cx, -cy);
+      ctx.translate(-cockX, -cockY);
       
-      // Tenta desenhar a imagem processada primeiro, depois a original
-      const imgToDraw = processedMari || imgMari;
-      if (!drawImageCoverCircle(imgToDraw, cx, cy, r)) {
-        // Placeholder simples se a imagem não carregou
-        ctx.fillStyle = "#ffb3d9";
+      // Tenta desenhar a imagem
+      const ok = drawImageCoverCircle(ctx, imgMari, cockX, cockY, cockR);
+      
+      // Se não desenhar, manter placeholder menor e discreto
+      if (!ok) {
+        ctx.save();
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = "#ff5aa5";
         ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.arc(cockX, cockY, cockR, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
       }
       
       ctx.restore();
       
-      // Contorno branco suave do círculo (fora do espelhamento, para ficar mais limpo no mobile)
-      if (imgMari.complete && imgMari.naturalWidth > 0) {
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+      // Sempre desenhar contorno suave (para ficar bonito)
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cockX, cockY, cockR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
 
       // contorno sutil
       ctx.strokeStyle = "rgba(0,0,0,.14)";
