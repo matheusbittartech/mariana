@@ -1,0 +1,1707 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Flappy Plane (Mobile)</title>
+  <style>
+    :root {
+      --bg1: #8fd3ff;
+      --bg2: #d9f3ff;
+      --ui: rgba(0,0,0,.55);
+      --card: rgba(255,255,255,.82);
+      --shadow: rgba(0,0,0,.18);
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #0b1220;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      overflow: hidden; /* mobile friendly */
+      touch-action: manipulation; /* evita zoom duplo e etc */
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .wrap {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    .frame {
+      width: min(520px, 100vw);
+      height: min(920px, 100vh);
+      position: relative;
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px var(--shadow);
+      background: linear-gradient(180deg, var(--bg1), var(--bg2));
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .hud {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .top {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .pill {
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.72);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 8px 22px rgba(0,0,0,.10);
+      color: #0b1220;
+      font-weight: 700;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pill small {
+      font-weight: 600;
+      opacity: .8;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: radial-gradient(1200px 600px at 50% 20%, rgba(255,255,255,.55), rgba(255,255,255,.05));
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .18s ease;
+    }
+
+    .overlay.show {
+      opacity: 1;
+      pointer-events: none;
+    }
+
+    .card {
+      width: min(420px, 92%);
+      background: var(--card);
+      backdrop-filter: blur(10px);
+      border-radius: 22px;
+      padding: 18px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.18);
+      color: #0b1220;
+      text-align: center;
+    }
+
+    .card h1 {
+      margin: 8px 0 6px;
+      font-size: 22px;
+      letter-spacing: .2px;
+    }
+
+    .card p {
+      margin: 6px 0 0;
+      color: rgba(0,0,0,.72);
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.35;
+      white-space: pre-line;
+    }
+
+    .hint {
+      margin-top: 14px;
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+      color: rgba(0,0,0,.75);
+      font-weight: 650;
+    }
+
+    .kbd {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 12px;
+      background: rgba(0,0,0,.10);
+      font-weight: 800;
+    }
+
+    .bottomNote {
+      margin-top: 12px;
+      font-size: 12px;
+      opacity: .8;
+      font-weight: 650;
+    }
+
+    /* Botões (precisam ser clicáveis no mobile) */
+    .actions {
+      margin-top: 14px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      pointer-events: auto;
+    }
+
+    button {
+      border: 0;
+      border-radius: 16px;
+      padding: 12px 14px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 10px 24px rgba(0,0,0,.12);
+      background: #0b1220;
+      color: white;
+      min-width: 140px;
+      touch-action: manipulation;
+    }
+
+    button.secondary {
+      background: rgba(255,255,255,.75);
+      color: #0b1220;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="frame" id="frame">
+      <canvas id="game" aria-label="Flappy Plane"></canvas>
+
+      <div class="hud">
+        <div class="top">
+          <div class="pill"><small>PONTOS</small> <span id="score">0</span></div>
+          <div class="pill"><small>RECORDE</small> <span id="best">0</span></div>
+          <div class="pill"><small>TENTATIVAS</small> <span id="attempts">10</span></div>
+        </div>
+
+        <div class="overlay show" id="overlay">
+          <div class="card">
+            <h1 id="title">Flappy Plane ✈️</h1>
+            <p id="subtitle">Toque na tela para o aviãozinho azul “pular”.</p>
+
+            <div class="hint">
+              <div>📱 Mobile: <span class="kbd">TOQUE</span> para subir</div>
+              <div>🖱️ PC: <span class="kbd">CLIQUE</span> / <span class="kbd">ESPAÇO</span></div>
+            </div>
+
+            <div class="actions">
+              <button id="btnPlay">Jogar</button>
+              <button class="secondary" id="btnReset">Zerar recorde</button>
+            </div>
+
+            <div class="bottomNote" id="note">Dica: mantenha taps curtos e ritmados.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ========= Config base =========
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const scoreEl = document.getElementById("score");
+    const bestEl  = document.getElementById("best");
+    const attemptsEl = document.getElementById("attempts");
+    const overlay = document.getElementById("overlay");
+    const titleEl = document.getElementById("title");
+    const subEl   = document.getElementById("subtitle");
+    const noteEl  = document.getElementById("note");
+    const btnPlay = document.getElementById("btnPlay");
+    const btnReset= document.getElementById("btnReset");
+
+    const DPR = Math.min(2, window.devicePixelRatio || 1);
+
+    function fitCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width  = Math.floor(rect.width  * DPR);
+      canvas.height = Math.floor(rect.height * DPR);
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0); // desenhar em px CSS
+    }
+    window.addEventListener("resize", fitCanvas);
+    fitCanvas();
+
+    // ========= Carregamento de imagens =========
+    const imgMari = new Image();
+    imgMari.src = "mari.jpeg";
+    const imgBruna = new Image();
+    imgBruna.src = "bruna.jpeg";
+    
+    // Imagens dos personagens da intro
+    const imgPietro = new Image();
+    imgPietro.src = "pietro.png";
+    const imgMatheus = new Image();
+    imgMatheus.src = "Matheus.png";
+    const imgBeatriz = new Image();
+    imgBeatriz.src = "Beatriz.png";
+    
+    // Imagem da máquina
+    const imgMachine = new Image();
+    imgMachine.src = "máquina.png";
+    imgMachine.onerror = () => { imgMachine.src = "maquina.png"; };
+    
+    // Canvas temporário para processar imagem da Mari (remover fundo preto)
+    let processedMari = null;
+    imgMari.onload = function() {
+      const tempCanvas = document.createElement("canvas");
+      const tempCtx = tempCanvas.getContext("2d");
+      tempCanvas.width = imgMari.width;
+      tempCanvas.height = imgMari.height;
+      
+      // Desenha a imagem original
+      tempCtx.drawImage(imgMari, 0, 0);
+      
+      // Remove fundo preto/escuro usando análise de pixels
+      const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+      const data = imageData.data;
+      
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        // Se for muito escuro (fundo preto), torna transparente
+        // Usa threshold mais refinado para pegar apenas fundo muito escuro
+        const brightness = (r + g + b) / 3;
+        if (brightness < 40 || (r < 60 && g < 60 && b < 60)) {
+          data[i + 3] = 0; // alpha = 0 (transparente)
+        }
+        // Também remove pixels muito escuros nas bordas (provavelmente sombra/fundo)
+        else if (brightness < 80 && (r < 100 && g < 100 && b < 100)) {
+          // Fade parcial para transições mais suaves
+          data[i + 3] = Math.min(255, data[i + 3] * 0.3);
+        }
+      }
+      
+      tempCtx.putImageData(imageData, 0, 0);
+      processedMari = tempCanvas;
+    };
+
+    // ========= Estado do jogo =========
+    const state = {
+      running: false,
+      gameOver: false,
+      startedOnce: false,
+      t: 0,
+      score: 0,
+      best: Number(localStorage.getItem("flappy_plane_best") || 0),
+      lastPipeX: 0,
+      win: false,
+      winScore: 15,
+      winPhase: "none", // "none" | "confetti" | "parachute" | "landed"
+      winTimer: 0,
+      attemptsMax: 10,
+      attemptsLeft: 10,
+      sessionLocked: true,
+      mode: "intro" // "intro" | "play" | "gameover" | "win"
+    };
+    bestEl.textContent = state.best;
+    
+    // Estado da intro
+    const intro = {
+      active: false,
+      phase: "panDown", // "panDown" | "walkTogether" | "talk" | "walkToMachine" | "boot" | "insertToken" | "panUp" | "ready"
+      t: 0,
+      cameraY: 0,
+      phaseTimer: 0
+    };
+    
+    // Personagens da intro
+    const characters = [
+      { name: "Pietro", img: imgPietro, x: 0, y: 0, targetX: 0, legPhase: 0, walking: false },
+      { name: "Matheus", img: imgMatheus, x: 0, y: 0, targetX: 0, legPhase: 0, walking: false },
+      { name: "Beatriz", img: imgBeatriz, x: 0, y: 0, targetX: 0, legPhase: 0, walking: false }
+    ];
+    
+    // Token da intro
+    const token = {
+      active: false,
+      x: 0,
+      y: 0,
+      targetX: 0,
+      targetY: 0,
+      vx: 0,
+      vy: 0
+    };
+    
+    // Partículas da intro
+    const introParticles = [];
+
+    // Confetti particles
+    const confettiParticles = [];
+
+    // Bruna drop state
+    let brunaDrop = {
+      active: false,
+      x: 0,
+      y: 0,
+      vy: 0
+    };
+
+    // ========= Física =========
+    const plane = {
+      x: 0,
+      y: 0,
+      vy: 0,
+      w: 42,
+      h: 28,
+      gravity: 1400,     // px/s^2
+      flapVel: -430,     // px/s
+      maxFall: 760,
+      rot: 0
+    };
+
+    // Obstáculos estilo "canos"
+    const pipes = [];
+    const pipeCfg = {
+      w: 72,
+      gap: 170,
+      speed: 240,          // px/s
+      spacing: 240,        // px
+      minTop: 70,
+      minBottom: 110,
+      variance: 230
+    };
+
+    // Chão
+    const ground = {
+      h: 84,
+      x: 0,
+      speedFactor: 1
+    };
+
+    // ========= Util =========
+    function rand(min, max) { return Math.random() * (max - min) + min; }
+
+    function resetGame() {
+      state.running = false;
+      state.gameOver = false;
+      state.score = 0;
+      state.t = 0;
+      state.win = false;
+      state.winPhase = "none";
+      state.winTimer = 0;
+      pipes.length = 0;
+      confettiParticles.length = 0;
+      brunaDrop.active = false;
+      scoreEl.textContent = "0";
+
+      const W = canvas.getBoundingClientRect().width;
+      const H = canvas.getBoundingClientRect().height;
+
+      plane.x = Math.max(90, W * 0.26);
+      plane.y = H * 0.46;
+      plane.vy = 0;
+      plane.rot = 0;
+
+      state.lastPipeX = W + 160;
+      spawnPipe(state.lastPipeX);
+      spawnPipe(state.lastPipeX + pipeCfg.spacing);
+
+      showOverlay("Flappy Plane ✈️", "Toque para começar e desvie dos obstáculos!", "Dica: se estiver difícil, faça taps menores e mais frequentes.");
+    }
+    
+    function resetRound() {
+      // Reset rápido para nova tentativa (sem intro)
+      state.running = false;
+      state.gameOver = false;
+      state.score = 0;
+      state.t = 0;
+      state.win = false;
+      state.winPhase = "none";
+      state.winTimer = 0;
+      pipes.length = 0;
+      confettiParticles.length = 0;
+      brunaDrop.active = false;
+      scoreEl.textContent = "0";
+
+      const W = canvas.getBoundingClientRect().width;
+      const H = canvas.getBoundingClientRect().height;
+
+      plane.x = Math.max(90, W * 0.26);
+      plane.y = H * 0.46;
+      plane.vy = 0;
+      plane.rot = 0;
+
+      state.lastPipeX = W + 160;
+      spawnPipe(state.lastPipeX);
+      spawnPipe(state.lastPipeX + pipeCfg.spacing);
+      
+      hideOverlay();
+    }
+    
+    function startIntro() {
+      intro.active = true;
+      intro.phase = "panDown";
+      intro.t = 0;
+      intro.phaseTimer = 0;
+      intro.cameraY = 0;
+      state.sessionLocked = true;
+      state.mode = "intro";
+      
+      const W = canvas.getBoundingClientRect().width;
+      const H = canvas.getBoundingClientRect().height;
+      const groundY = H - ground.h;
+      
+      // Posições iniciais dos personagens (mais à direita) - ajustado para tamanho maior
+      const charHeight = 66 + 30; // headSize + legLength (atualizado)
+      const baseX = W * 0.62;
+      const spacing = 80;
+      const charBaseY = groundY - 36; // Offset ajustado
+      
+      characters[0].x = baseX - spacing;
+      characters[0].y = charBaseY;
+      characters[0].targetX = baseX - spacing;
+      characters[0].legPhase = 0;
+      characters[0].walking = false;
+      
+      characters[1].x = baseX;
+      characters[1].y = charBaseY;
+      characters[1].targetX = baseX;
+      characters[1].legPhase = Math.PI * 0.3;
+      characters[1].walking = false;
+      
+      characters[2].x = baseX + spacing;
+      characters[2].y = charBaseY;
+      characters[2].targetX = baseX + spacing;
+      characters[2].legPhase = Math.PI * 0.6;
+      characters[2].walking = false;
+      
+      // Atualiza definição de fase para incluir "talk"
+      if (!intro.phase || intro.phase === "none") {
+        intro.phase = "panDown";
+      }
+      
+      token.active = false;
+      introParticles.length = 0;
+      
+      hideOverlay();
+    }
+
+    function showOverlay(title, subtitle, note) {
+      titleEl.textContent = title;
+      subEl.textContent = subtitle;
+      noteEl.textContent = note || "";
+      
+      // Muda texto do botão se estiver no WIN
+      if (state.win || state.winPhase === "landed") {
+        btnPlay.textContent = "Jogar de novo";
+      } else {
+        btnPlay.textContent = "Jogar";
+      }
+      
+      overlay.classList.add("show");
+    }
+    function hideOverlay() { overlay.classList.remove("show"); }
+
+    function spawnPipe(x) {
+      const H = canvas.getBoundingClientRect().height;
+      const playableH = H - ground.h;
+
+      const gap = pipeCfg.gap;
+      const center = playableH * 0.52 + rand(-pipeCfg.variance/2, pipeCfg.variance/2);
+
+      const topH = Math.max(pipeCfg.minTop, Math.min(center - gap/2, playableH - pipeCfg.minBottom - gap));
+      const bottomY = topH + gap;
+
+      pipes.push({
+        x,
+        topH,
+        bottomY,
+        passed: false
+      });
+    }
+
+    function flap() {
+      // Bloqueia input durante intro (exceto na fase ready)
+      if (intro.active && intro.phase !== "ready") {
+        return;
+      }
+      
+      if (state.sessionLocked && intro.phase !== "ready") {
+        return;
+      }
+      
+      // Se estiver na fase ready, permite começar
+      if (intro.phase === "ready") {
+        intro.active = false;
+        state.startedOnce = true;
+        state.running = true;
+        hideOverlay();
+        plane.vy = plane.flapVel;
+        return;
+      }
+
+      if (!state.startedOnce) state.startedOnce = true;
+
+      if (!state.running && !state.gameOver && !state.win) {
+        state.running = true;
+        hideOverlay();
+      }
+
+      if (state.gameOver) {
+        // Não reinicia automaticamente, aguarda tentativa
+        return;
+      }
+
+      if (state.win) {
+        // WIN reinicia sessão completa
+        state.attemptsLeft = state.attemptsMax;
+        attemptsEl.textContent = String(state.attemptsLeft);
+        startIntro();
+        return;
+      }
+
+      if (!state.running) return;
+
+      plane.vy = plane.flapVel;
+    }
+
+    // ========= Input: mobile + desktop =========
+    // pointerdown cobre toque e clique
+    canvas.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      flap();
+    }, { passive: false });
+
+    // clique fora do canvas (na frame) também funciona (bom pro mobile)
+    document.getElementById("frame").addEventListener("pointerdown", (e) => {
+      // evita duplo disparo quando clicar no canvas
+      if (e.target === canvas) return;
+      if (e.target.tagName === "BUTTON") return;
+      flap();
+    }, { passive: true });
+
+    // teclado (pc)
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Space" || e.code === "ArrowUp") {
+        e.preventDefault();
+        flap();
+      }
+    }, { passive: false });
+
+    // botões
+    btnPlay.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (state.win || state.winPhase === "landed") {
+        // WIN reinicia sessão completa com intro
+        state.attemptsLeft = state.attemptsMax;
+        attemptsEl.textContent = String(state.attemptsLeft);
+        state.score = 0;
+        scoreEl.textContent = "0";
+        state.win = false;
+        state.winPhase = "none";
+        state.winTimer = 0;
+        state.gameOver = false;
+        state.running = false;
+        state.startedOnce = false;
+        pipes.length = 0;
+        confettiParticles.length = 0;
+        brunaDrop.active = false;
+        hideOverlay();
+        startIntro();
+        return;
+      }
+      
+      if (state.mode === "gameover" || (state.attemptsLeft === 0)) {
+        // Acabaram tentativas - inicia nova sessão com intro
+        state.attemptsLeft = state.attemptsMax;
+        attemptsEl.textContent = String(state.attemptsLeft);
+        startIntro();
+        return;
+      }
+      
+      if (state.gameOver) {
+        // Game over normal - não deve acontecer aqui se tentativas > 0
+        return;
+      }
+      
+      // Início normal - inicia intro se for primeira vez ou se estiver locked
+      if ((!state.startedOnce && state.sessionLocked) || (state.sessionLocked && !intro.active)) {
+        startIntro();
+        return;
+      }
+      
+      if (!state.win && !state.sessionLocked) {
+        state.running = true;
+        state.startedOnce = true;
+        hideOverlay();
+        flap();
+      }
+    });
+    btnReset.addEventListener("click", (e) => {
+      e.preventDefault();
+      localStorage.removeItem("flappy_plane_best");
+      state.best = 0;
+      bestEl.textContent = "0";
+    });
+
+    // ========= Desenho =========
+    function drawBackground(W, H) {
+      // céu gradiente
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, "#8fd3ff");
+      g.addColorStop(1, "#d9f3ff");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+
+      // nuvens
+      const cloudY1 = H * 0.18 + Math.sin(state.t * 0.6) * 6;
+      const cloudY2 = H * 0.30 + Math.sin(state.t * 0.45 + 1.3) * 5;
+
+      drawCloud(W * 0.18, cloudY1, 1.0);
+      drawCloud(W * 0.62, cloudY2, 0.9);
+      drawCloud(W * 0.85, cloudY1 + 70, 0.75);
+
+      // montanhas suaves
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = "#0b1220";
+      ctx.beginPath();
+      ctx.moveTo(0, H - ground.h - 60);
+      ctx.quadraticCurveTo(W * 0.25, H * 0.60, W * 0.50, H - ground.h - 70);
+      ctx.quadraticCurveTo(W * 0.75, H * 0.68, W, H - ground.h - 50);
+      ctx.lineTo(W, H);
+      ctx.lineTo(0, H);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawCloud(x, y, s=1) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(s, s);
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = "#ffffff";
+      roundedBlob(-30, 0, 34, 22);
+      roundedBlob(0, -10, 48, 30);
+      roundedBlob(40, 0, 34, 22);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    function roundedBlob(x, y, w, h) {
+      const r = Math.min(w, h) * 0.45;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, r);
+      ctx.fill();
+    }
+
+    function drawGround(W, H, dt) {
+      // base
+      ctx.fillStyle = "#0b1220";
+      ctx.globalAlpha = 0.10;
+      ctx.fillRect(0, H - ground.h, W, ground.h);
+      ctx.globalAlpha = 1;
+
+      // faixa
+      ctx.fillStyle = "rgba(0,0,0,.08)";
+      ctx.fillRect(0, H - ground.h, W, 10);
+
+      // "pistas" rolando
+      ground.x -= (pipeCfg.speed * 0.55) * dt;
+      const stripeW = 36;
+      if (ground.x <= -stripeW) ground.x += stripeW;
+
+      ctx.fillStyle = "rgba(255,255,255,.45)";
+      for (let i = -2; i < Math.ceil(W / stripeW) + 2; i++) {
+        const x = ground.x + i * stripeW;
+        ctx.fillRect(x, H - ground.h + 22, stripeW * 0.55, 8);
+      }
+    }
+
+    function drawPipes(W, H) {
+      const playableH = H - ground.h;
+      for (const p of pipes) {
+        // top
+        drawPipeBlock(p.x, 0, pipeCfg.w, p.topH, true);
+        // bottom
+        drawPipeBlock(p.x, p.bottomY, pipeCfg.w, playableH - p.bottomY, false);
+      }
+    }
+
+    function drawPipeBlock(x, y, w, h, isTop) {
+      // estilo "tubo" com gradiente
+      const grad = ctx.createLinearGradient(x, 0, x + w, 0);
+      grad.addColorStop(0, "#1b7a52");
+      grad.addColorStop(0.5, "#2bd18b");
+      grad.addColorStop(1, "#136341");
+      ctx.fillStyle = grad;
+
+      // corpo
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 14);
+      ctx.fill();
+
+      // brilho
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.roundRect(x + 10, y + 10, 10, Math.max(18, h - 20), 10);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      // bocal
+      const lipH = 18;
+      ctx.fillStyle = "rgba(0,0,0,.12)";
+      if (isTop) {
+        ctx.fillRect(x, y + h - lipH, w, lipH);
+      } else {
+        ctx.fillRect(x, y, w, lipH);
+      }
+    }
+
+    function drawPlane() {
+      const px = plane.x;
+      const py = plane.y;
+
+      // rotação baseada na velocidade
+      plane.rot = Math.max(-0.45, Math.min(0.95, plane.vy / 520));
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(plane.rot);
+
+      // sombra
+      ctx.globalAlpha = 0.12;
+      ctx.fillStyle = "#000";
+      ctx.beginPath();
+      ctx.ellipse(6, 12, 24, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      // corpo do avião (azul)
+      ctx.fillStyle = "#1e7dff";
+      ctx.beginPath();
+      ctx.roundRect(-plane.w/2, -plane.h/2, plane.w, plane.h, 12);
+      ctx.fill();
+
+      // nariz
+      ctx.fillStyle = "#0f58c9";
+      ctx.beginPath();
+      ctx.moveTo(plane.w/2, 0);
+      ctx.lineTo(plane.w/2 + 18, -8);
+      ctx.lineTo(plane.w/2 + 18, 8);
+      ctx.closePath();
+      ctx.fill();
+
+      // asa
+      ctx.fillStyle = "#0b3f92";
+      ctx.beginPath();
+      ctx.moveTo(-6, 0);
+      ctx.lineTo(10, 16);
+      ctx.lineTo(-18, 10);
+      ctx.closePath();
+      ctx.fill();
+
+      // cauda
+      ctx.fillStyle = "#0b3f92";
+      ctx.beginPath();
+      ctx.moveTo(-plane.w/2 + 6, -8);
+      ctx.lineTo(-plane.w/2 - 10, -18);
+      ctx.lineTo(-plane.w/2 + 12, -18);
+      ctx.closePath();
+      ctx.fill();
+
+      // janela
+      ctx.fillStyle = "rgba(255,255,255,.9)";
+      ctx.beginPath();
+      ctx.roundRect(2, -8, 14, 10, 6);
+      ctx.fill();
+
+      // Mari cabeça no cockpit
+      if (imgMari.complete && imgMari.naturalWidth > 0) {
+        ctx.save();
+        
+        // Clip em círculo/oval para a cabeça
+        ctx.beginPath();
+        ctx.ellipse(6, -12, 14, 16, 0, 0, Math.PI * 2);
+        ctx.clip();
+        
+        // Espelha horizontalmente para ela olhar para o lado (esquerda/nariz do avião)
+        ctx.translate(6, -12);
+        ctx.scale(-1, 1); // espelha horizontalmente
+        ctx.translate(-6, 12);
+        
+        // Usa composição para remover fundo preto ao desenhar
+        ctx.globalCompositeOperation = "source-over";
+        const imgToDraw = processedMari || imgMari;
+        const headSize = 32;
+        
+        // Se temos imagem processada, usa ela, senão tenta remover fundo escuro na hora
+        if (processedMari) {
+          ctx.drawImage(processedMari, 6 - headSize/2, -12 - headSize/2, headSize, headSize);
+        } else {
+          // Fallback: desenha com composição que ignora pixels muito escuros
+          ctx.save();
+          ctx.globalCompositeOperation = "source-over";
+          ctx.drawImage(imgMari, 6 - headSize/2, -12 - headSize/2, headSize, headSize);
+          ctx.restore();
+        }
+        
+        ctx.restore();
+      } else {
+        // Placeholder simples se a imagem não carregou
+        ctx.fillStyle = "#ffb3d9";
+        ctx.beginPath();
+        ctx.ellipse(6, -12, 12, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // contorno sutil
+      ctx.strokeStyle = "rgba(0,0,0,.14)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(-plane.w/2, -plane.h/2, plane.w, plane.h, 12);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawFlashText(W, H, text) {
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = "rgba(0,0,0,.55)";
+      ctx.font = "800 18px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(text, W/2, H * 0.20);
+      ctx.restore();
+    }
+
+    function drawConfetti(W, H, dt) {
+      for (let i = confettiParticles.length - 1; i >= 0; i--) {
+        const p = confettiParticles[i];
+        p.y += p.vy * dt;
+        p.x += p.vx * dt;
+        p.vy += 180 * dt; // gravidade leve
+        p.life -= dt;
+        
+        if (p.life <= 0 || p.y > H) {
+          confettiParticles.splice(i, 1);
+          continue;
+        }
+        
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, p.life / 0.5);
+        ctx.fillStyle = p.color;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillRect(-3, -3, 6, 6);
+        ctx.restore();
+      }
+    }
+
+    function drawParachute(x, y) {
+      ctx.save();
+      ctx.translate(x, y);
+      
+      // Paraquedas (semicírculo/arco) - ajustado para tamanho maior
+      ctx.fillStyle = "#ff6b6b";
+      ctx.beginPath();
+      ctx.arc(0, -45, 35, 0, Math.PI, true);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Linhas do paraquedas (cordas) - ajustadas para tamanho maior
+      ctx.strokeStyle = "rgba(0,0,0,.4)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-25, -45);
+      ctx.lineTo(0, -15);
+      ctx.moveTo(25, -45);
+      ctx.lineTo(0, -15);
+      ctx.moveTo(-12, -45);
+      ctx.lineTo(-6, -15);
+      ctx.moveTo(12, -45);
+      ctx.lineTo(6, -15);
+      ctx.stroke();
+      
+      ctx.restore();
+    }
+
+    function drawBrunaDrop(W, H) {
+      if (!brunaDrop.active) return;
+      
+      const size = 70; // Aumentado de 40 para 70
+      
+      // Desenha paraquedas (posicionado acima da Bruna)
+      drawParachute(brunaDrop.x, brunaDrop.y - size/2 - 10);
+      
+      // Desenha Bruna
+      if (imgBruna.complete && imgBruna.naturalWidth > 0) {
+        ctx.save();
+        ctx.translate(brunaDrop.x, brunaDrop.y);
+        ctx.drawImage(imgBruna, -size/2, -size/2, size, size);
+        ctx.restore();
+      } else {
+        // Placeholder
+        ctx.fillStyle = "#ffd93d";
+        ctx.beginPath();
+        ctx.ellipse(brunaDrop.x, brunaDrop.y, size/2, size/2, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    
+    // ========= Funções da Intro =========
+    function drawCharacter(char, W, H) {
+      const headSize = 66; // Aumentado de 55 para 66 (+20%)
+      const bodyH = 48; // Aumentado de 40 para 48 (+20%)
+      const legLength = 30; // Aumentado de 24 para 30 (+25%)
+      const groundY = H - ground.h;
+      
+      ctx.save();
+      ctx.translate(char.x, char.y);
+      
+      // Sombra suave no chão
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = "#000";
+      ctx.beginPath();
+      ctx.ellipse(0, legLength + 2, 18, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      
+      // Bounce sutil na fase walkTogether e talk
+      let bounceY = 0;
+      if ((intro.phase === "walkTogether" || intro.phase === "talk") && char.walking) {
+        bounceY = Math.sin(intro.phaseTimer * 6) * 1.5;
+      }
+      // Na fase talk, aproxima as cabeças e faz bobbing
+      if (intro.phase === "talk") {
+        bounceY = Math.sin(intro.t * 6) * 1.5;
+      }
+      ctx.translate(0, bounceY);
+      
+      // Pernas (animação de caminhada)
+      if (char.walking) {
+        const legOffset = Math.sin(char.legPhase) * 9; // Aumentado para personagens maiores
+        ctx.strokeStyle = "#0b1220";
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(-7, 0);
+        ctx.lineTo(-7 + legOffset, legLength);
+        ctx.moveTo(7, 0);
+        ctx.lineTo(7 - legOffset, legLength);
+        ctx.stroke();
+      } else {
+        ctx.strokeStyle = "#0b1220";
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(-7, 0);
+        ctx.lineTo(-7, legLength);
+        ctx.moveTo(7, 0);
+        ctx.lineTo(7, legLength);
+        ctx.stroke();
+      }
+      
+      // Corpo (linha simples)
+      ctx.strokeStyle = "#0b1220";
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(0, -headSize/2);
+      ctx.lineTo(0, 0);
+      ctx.stroke();
+      
+      // Cabeça (imagem recortada em círculo)
+      if (char.img.complete && char.img.naturalWidth > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(0, -headSize/2, headSize/2, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(char.img, -headSize/2, -headSize, headSize, headSize);
+        ctx.restore();
+      } else {
+        // Placeholder
+        ctx.fillStyle = "#ffb3d9";
+        ctx.beginPath();
+        ctx.arc(0, -headSize/2, headSize/2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      ctx.restore();
+    }
+    
+    function drawTalkBubbles(W, H) {
+      if (intro.phase !== "talk") return;
+      
+      const centerX = W * 0.5;
+      const bubbleY = H - ground.h - 180; // Acima dos personagens
+      
+      // 3 bolinhas "..." alternando opacidade
+      const bubbleSpacing = 8;
+      const bubbleSize = 4;
+      
+      for (let i = 0; i < 3; i++) {
+        const offsetX = (i - 1) * bubbleSpacing;
+        const alpha = 0.3 + Math.sin(intro.t * 4 + i * 0.8) * 0.4;
+        
+        ctx.save();
+        ctx.globalAlpha = Math.max(0.1, Math.min(0.9, alpha));
+        ctx.fillStyle = "#0b1220";
+        ctx.beginPath();
+        ctx.arc(centerX + offsetX, bubbleY, bubbleSize, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+    
+    function drawArcadeMachine(W, H) {
+      // groundTop é o topo do chão (onde começa o ground)
+      const groundTop = H - ground.h;
+      const machineW = 90;
+      // Calcula altura proporcional mantendo aspect ratio
+      let machineH = machineW;
+      if (imgMachine.complete && imgMachine.naturalWidth > 0) {
+        const aspectRatio = imgMachine.naturalHeight / imgMachine.naturalWidth;
+        machineH = machineW * aspectRatio;
+      } else {
+        machineH = 68; // Fallback
+      }
+      
+      const machineX = 18; // Canto esquerdo
+      // machineY é a coordenada Y da BASE da máquina (onde toca o chão)
+      // +2 para "assentar" e não ficar com gap
+      const machineY = groundTop + 2;
+      const machineCenterX = machineX + machineW * 0.55;
+      const machineCenterY = machineY - machineH * 0.45; // Centro vertical da máquina
+      
+      ctx.save();
+      
+      // Sombra bem evidente no chão (no topo do chão + offset)
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = "#000";
+      ctx.beginPath();
+      ctx.ellipse(machineX + machineW * 0.55, groundTop + 10, machineW * 0.28, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      
+      // Rotação sutil para parecer virada para os personagens (à direita)
+      ctx.translate(machineCenterX, machineCenterY);
+      ctx.rotate(+0.08); // Rotação positiva (virada para direita)
+      ctx.translate(-machineCenterX, -machineCenterY);
+      
+      // Tenta desenhar imagem da máquina
+      // machineY é a base, então desenhamos de machineY - machineH até machineY
+      if (imgMachine.complete && imgMachine.naturalWidth > 0) {
+        ctx.drawImage(imgMachine, machineX, machineY - machineH, machineW, machineH);
+        
+        // Overlay do visor se estiver ligado
+        if (intro.phase === "boot" || intro.phase === "insertToken" || intro.phase === "panUp" || intro.phase === "ready") {
+          const visorW = machineW * 0.6;
+          const visorH = machineH * 0.15;
+          const visorX = machineX + machineW * 0.2;
+          const visorY = machineY - machineH + machineH * 0.2; // machineY - machineH é o topo da máquina
+          
+          // Visor ligado (overlay verde)
+          ctx.fillStyle = "rgba(45, 255, 136, 0.6)";
+          ctx.beginPath();
+          ctx.roundRect(visorX, visorY, visorW, visorH, 4);
+          ctx.fill();
+          
+          // Brilho animado no visor durante boot
+          if (intro.phase === "boot") {
+            const glowAlpha = 0.3 + Math.sin(intro.phaseTimer * 8) * 0.2;
+            ctx.fillStyle = `rgba(255, 255, 255, ${glowAlpha})`;
+            ctx.beginPath();
+            ctx.roundRect(visorX + 2, visorY + 2, visorW - 4, visorH - 4, 3);
+            ctx.fill();
+          }
+          
+          // Pulso no visor quando token entra
+          if (intro.phase === "insertToken" && intro.phaseTimer < 0.3) {
+            const pulse = 1 + Math.sin(intro.phaseTimer * 20) * 0.1;
+            ctx.save();
+            ctx.translate(visorX + visorW/2, visorY + visorH/2);
+            ctx.scale(pulse, pulse);
+            ctx.translate(-(visorX + visorW/2), -(visorY + visorH/2));
+            ctx.fillStyle = "rgba(45, 255, 136, 0.8)";
+            ctx.beginPath();
+            ctx.roundRect(visorX, visorY, visorW, visorH, 4);
+            ctx.fill();
+            ctx.restore();
+          }
+          
+          // Texto no visor
+          if (intro.phase === "boot") {
+            ctx.fillStyle = "#0b1220";
+            ctx.font = "600 11px system-ui";
+            ctx.textAlign = "center";
+            ctx.fillText("INICIANDO...", machineX + machineW * 0.5, visorY + visorH/2 + 3);
+            
+            // Barra de carregamento
+            const progress = Math.min(1, intro.phaseTimer / 1.4);
+            ctx.fillStyle = "#0b1220";
+            ctx.fillRect(visorX + 6, visorY + visorH - 6, (visorW - 12) * progress, 3);
+          } else if (intro.phase === "insertToken" || intro.phase === "panUp" || intro.phase === "ready") {
+            ctx.fillStyle = "#0b1220";
+            ctx.font = "600 10px system-ui";
+            ctx.textAlign = "center";
+            ctx.fillText("READY", machineX + machineW * 0.5, visorY + visorH/2 + 3);
+          }
+        }
+      } else {
+        // Fallback: desenha máquina com canvas (mantido do código original)
+        // Corpo da máquina (machineY - machineH é o topo, machineY é a base)
+        ctx.fillStyle = "#1a1a2e";
+        ctx.beginPath();
+        ctx.roundRect(machineX, machineY - machineH, machineW, machineH, 8);
+        ctx.fill();
+        
+        // Visor
+        const visorW = machineW - 20;
+        const visorH = 20;
+        const visorX = machineX + 10;
+        const visorY = machineY - machineH + 15;
+        
+        if (intro.phase === "boot" || intro.phase === "insertToken" || intro.phase === "panUp" || intro.phase === "ready") {
+          // Visor ligado
+          ctx.fillStyle = "#2dff88";
+          ctx.beginPath();
+          ctx.roundRect(visorX, visorY, visorW, visorH, 4);
+          ctx.fill();
+          
+          // Texto no visor
+          if (intro.phase === "boot") {
+            ctx.fillStyle = "#0b1220";
+            ctx.font = "600 10px system-ui";
+            ctx.textAlign = "center";
+            ctx.fillText("INICIANDO...", machineX + machineW/2, visorY + visorH/2 + 3);
+            
+            // Barra de carregamento
+            const progress = Math.min(1, intro.phaseTimer / 1.4);
+            ctx.fillStyle = "#0b1220";
+            ctx.fillRect(visorX + 5, visorY + visorH - 6, (visorW - 10) * progress, 3);
+          } else if (intro.phase === "insertToken" || intro.phase === "panUp" || intro.phase === "ready") {
+            ctx.fillStyle = "#0b1220";
+            ctx.font = "600 9px system-ui";
+            ctx.textAlign = "center";
+            ctx.fillText("READY", machineX + machineW/2, visorY + visorH/2 + 3);
+          }
+        } else {
+          // Visor desligado
+          ctx.fillStyle = "#0b1220";
+          ctx.beginPath();
+          ctx.roundRect(visorX, visorY, visorW, visorH, 4);
+          ctx.fill();
+        }
+        
+        // Slot de ficha
+        const slotW = 12;
+        const slotH = 4;
+        ctx.fillStyle = "#0b1220";
+        ctx.fillRect(machineX + machineW * 0.5 - slotW/2, machineY - 10, slotW, slotH);
+      }
+      
+      ctx.restore();
+    }
+    
+    function drawToken() {
+      if (!token.active) return;
+      
+      ctx.save();
+      ctx.fillStyle = "#ffd700";
+      ctx.beginPath();
+      ctx.arc(token.x, token.y, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#ffaa00";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+    }
+    
+    function drawIntroParticles(W, H) {
+      for (let i = introParticles.length - 1; i >= 0; i--) {
+        const p = introParticles[i];
+        p.x += p.vx * 0.016;
+        p.y += p.vy * 0.016;
+        p.vy += 200 * 0.016;
+        p.life -= 0.016;
+        
+        if (p.life <= 0 || p.y > H) {
+          introParticles.splice(i, 1);
+          continue;
+        }
+        
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, p.life / 0.5);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+    
+    function updateIntro(W, H, dt) {
+      if (!intro.active) return;
+      
+      intro.t += dt;
+      intro.phaseTimer += dt;
+      const groundY = H - ground.h;
+      
+      // Easing function
+      function easeInOut(t) {
+        return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      }
+      
+      if (intro.phase === "panDown") {
+        // Câmera desce até o chão (ajustado para melhor enquadramento)
+        const duration = 1.6; // Aumentado de 1.2 para 1.6
+        const progress = Math.min(1, intro.phaseTimer / duration);
+        const eased = easeInOut(progress);
+        // Ajustado para melhor enquadramento (terço inferior)
+        intro.cameraY = (H * 0.35) * eased;
+        
+        if (progress >= 1) {
+          intro.phase = "walkTogether";
+          intro.phaseTimer = 0;
+          // Define posições alvo (bolinho à direita) - espaçamento aumentado
+          const centerX = W * 0.62;
+          const spacing = 70; // Espaçamento para bolinho
+          characters[0].targetX = centerX - spacing;
+          characters[1].targetX = centerX;
+          characters[2].targetX = centerX + spacing;
+          characters.forEach(c => c.walking = true);
+        }
+      } else if (intro.phase === "walkTogether") {
+        // Personagens caminham até o bolinho (mais lento)
+        const duration = 2.2; // Aumentado de 1.0 para 2.2
+        const progress = Math.min(1, intro.phaseTimer / duration);
+        const baseX = W * 0.62;
+        const spacing = 80;
+        
+        characters.forEach((char, i) => {
+          const startX = baseX + (i - 1) * spacing;
+          char.x = startX + (char.targetX - startX) * progress;
+          char.legPhase += dt * 7.5; // Frequência aumentada para passos mais naturais
+        });
+        
+        if (progress >= 1) {
+          intro.phase = "talk";
+          intro.phaseTimer = 0;
+          // Aproxima as cabeças levemente (8px)
+          const centerX = W * 0.62;
+          characters[0].targetX = centerX - 62; // Aproximado de 70 para 62
+          characters[1].targetX = centerX;
+          characters[2].targetX = centerX + 62; // Aproximado de 70 para 62
+          characters.forEach(c => c.walking = false);
+        }
+      } else if (intro.phase === "talk") {
+        // Fase de conversa (nova)
+        const duration = 1.4;
+        const progress = Math.min(1, intro.phaseTimer / duration);
+        const centerX = W * 0.62;
+        
+        // Aproxima as cabeças suavemente
+        characters.forEach((char, i) => {
+          const startSpacing = 70;
+          const endSpacing = 62;
+          const spacing = startSpacing + (endSpacing - startSpacing) * progress;
+          if (i === 0) char.x = centerX - spacing;
+          else if (i === 1) char.x = centerX;
+          else char.x = centerX + spacing;
+        });
+        
+        if (progress >= 1) {
+          intro.phase = "walkToMachine";
+          intro.phaseTimer = 0;
+          const machineX = 18; // Posição da máquina (canto esquerdo)
+          const machineW = 90;
+          const targetX = machineX + machineW + 60; // Parar na frente da máquina (lado direito)
+          characters.forEach((c, i) => {
+            c.targetX = targetX + (i - 1) * 35; // Alinhar em "bolinho"
+            c.walking = true;
+          });
+        }
+      } else if (intro.phase === "walkToMachine") {
+        // Grupinho caminha até a máquina (mais lento)
+        const duration = 2.6; // Aumentado de 1.0 para 2.6
+        const progress = Math.min(1, intro.phaseTimer / duration);
+        const startX = W * 0.62;
+        const machineX = 18; // Posição da máquina (canto esquerdo)
+        const machineW = 90;
+        const targetX = machineX + machineW + 60; // Parar na frente da máquina
+        
+        characters.forEach((char, i) => {
+          const startOffset = (i - 1) * 70; // Espaçamento inicial do centro
+          const endOffset = (i - 1) * 35; // Espaçamento final (bolinho)
+          const targetXFinal = targetX + (i - 1) * 35;
+          char.x = startX + (i - 1) * 70 + (targetXFinal - (startX + (i - 1) * 70)) * progress;
+          char.legPhase += dt * 7.5; // Frequência aumentada
+        });
+        
+        if (progress >= 1) {
+          intro.phase = "boot";
+          intro.phaseTimer = 0;
+          characters.forEach(c => c.walking = false);
+        }
+      } else if (intro.phase === "boot") {
+        // Máquina liga
+        if (intro.phaseTimer >= 1.4) { // Aumentado de 1.2 para 1.4
+          intro.phase = "insertToken";
+          intro.phaseTimer = 0;
+          // Token sai da mão do primeiro personagem
+          token.active = true;
+          token.x = characters[0].x;
+          token.y = characters[0].y - 45; // Ajustado para personagens maiores
+          const machineX = 18;
+          const machineW = 90;
+          let machineH = 68; // Aproximado, será calculado se tiver imagem
+          if (imgMachine.complete && imgMachine.naturalWidth > 0) {
+            const aspectRatio = imgMachine.naturalHeight / imgMachine.naturalWidth;
+            machineH = machineW * aspectRatio;
+          }
+          const groundTop = H - ground.h;
+          const machineY = groundTop + 2; // Base da máquina (onde toca o chão)
+          token.targetX = machineX + machineW * 0.62; // Slot da máquina
+          token.targetY = machineY - machineH * 0.38; // Slot da máquina (parte superior da máquina)
+          token.vx = (token.targetX - token.x) / 1.0; // Aumentado de 0.6 para 1.0
+          token.vy = (token.targetY - token.y) / 1.0;
+        }
+      } else if (intro.phase === "insertToken") {
+        // Token voa até o slot
+        token.x += token.vx * dt;
+        token.y += token.vy * dt;
+        
+        if (Math.abs(token.x - token.targetX) < 5 && Math.abs(token.y - token.targetY) < 5) {
+          token.x = token.targetX;
+          token.y = token.targetY;
+          token.active = false;
+          
+          // Partículas subindo quando token entra (6-10 partículas)
+          const colors = ["#ffd700", "#ffaa00", "#ffff00", "#ffcc00"];
+          const particleCount = 8;
+          for (let i = 0; i < particleCount; i++) {
+            introParticles.push({
+              x: token.x,
+              y: token.y,
+              vx: rand(-60, 60),
+              vy: rand(-120, -60), // Subindo
+              color: colors[Math.floor(Math.random() * colors.length)],
+              life: rand(0.6, 1.2)
+            });
+          }
+          
+          intro.phase = "panUp";
+          intro.phaseTimer = 0;
+        }
+      } else if (intro.phase === "panUp") {
+        // Câmera sobe de volta
+        const duration = 1.4; // Aumentado de 1.2 para 1.4
+        const progress = Math.min(1, intro.phaseTimer / duration);
+        const eased = easeInOut(progress);
+        const startCameraY = H * 0.35; // Ajustado para corresponder ao panDown
+        intro.cameraY = startCameraY * (1 - eased);
+        
+        // Partículas de "PARTIDA INICIADA"
+        if (intro.phaseTimer < 0.3 && Math.random() < 0.3) {
+          const colors = ["#ff6b6b", "#4ecdc4", "#ffe66d"];
+          introParticles.push({
+            x: W * 0.5 + rand(-50, 50),
+            y: H * 0.3 + rand(-30, 30),
+            vx: rand(-50, 50),
+            vy: rand(-80, -20),
+            color: colors[Math.floor(Math.random() * colors.length)],
+            life: rand(1.0, 1.5)
+          });
+        }
+        
+        if (progress >= 1) {
+          intro.phase = "ready";
+          intro.phaseTimer = 0;
+          intro.cameraY = 0;
+          state.sessionLocked = false;
+          state.mode = "play";
+          showOverlay("Flappy Plane ✈️", "Você tem 10 tentativas!\nToque para começar e desvie dos obstáculos!", "Dica: se estiver difícil, faça taps menores e mais frequentes.");
+        }
+      } else if (intro.phase === "ready") {
+        // Intro completa, aguardando primeiro toque
+        intro.active = false;
+      }
+    }
+
+    // ========= Colisão =========
+    function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
+      return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+    }
+
+    function checkCollision(W, H) {
+      const playableH = H - ground.h;
+
+      // bounding box do avião (simples e eficiente)
+      const ax = plane.x - plane.w/2;
+      const ay = plane.y - plane.h/2;
+      const aw = plane.w;
+      const ah = plane.h;
+
+      // teto / chão
+      if (ay < 0) return true;
+      if (ay + ah > playableH) return true;
+
+      for (const p of pipes) {
+        // topo
+        if (rectsOverlap(ax, ay, aw, ah, p.x, 0, pipeCfg.w, p.topH)) return true;
+        // baixo
+        if (rectsOverlap(ax, ay, aw, ah, p.x, p.bottomY, pipeCfg.w, playableH - p.bottomY)) return true;
+      }
+      return false;
+    }
+
+    // ========= Loop =========
+    let last = performance.now();
+    function loop(now) {
+      const dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+      state.t += dt;
+
+      const W = canvas.getBoundingClientRect().width;
+      const H = canvas.getBoundingClientRect().height;
+
+      // Atualiza WIN mode
+      if (state.win) {
+        state.winTimer += dt;
+        
+        if (state.winPhase === "confetti") {
+          // Continua gerando confetti ocasionalmente
+          if (confettiParticles.length < 30) {
+            const colors = ["#ff6b6b", "#4ecdc4", "#ffe66d", "#95e1d3", "#f38181", "#aa96da"];
+            for (let i = 0; i < 5; i++) {
+              confettiParticles.push({
+                x: rand(0, W),
+                y: rand(0, H * 0.5),
+                vx: rand(-180, 180),
+                vy: rand(-200, -100),
+                rot: rand(0, Math.PI * 2),
+                color: colors[Math.floor(Math.random() * colors.length)],
+                life: rand(1.5, 2.5)
+              });
+            }
+          }
+          
+          // Após ~1.2s, inicia fase parachute
+          if (state.winTimer >= 1.2) {
+            state.winPhase = "parachute";
+            brunaDrop.active = true;
+            brunaDrop.x = plane.x;
+            brunaDrop.y = plane.y;
+            brunaDrop.vy = 0;
+          }
+        } else if (state.winPhase === "parachute") {
+          // Física da queda lenta da Bruna
+          brunaDrop.vy += 220 * dt; // gravidade pequena
+          brunaDrop.vy = Math.min(brunaDrop.vy, 140); // maxFall limitado
+          brunaDrop.y += brunaDrop.vy * dt;
+          
+          // Verifica se tocou o chão
+          const groundY = H - ground.h - 35; // metade da altura do sprite (ajustado para tamanho maior)
+          if (brunaDrop.y >= groundY) {
+            brunaDrop.y = groundY;
+            state.winPhase = "landed";
+            showOverlay("🎉✈️ Você ganhou uma FLASH TATTOO! ✨", "WOW! Que vitória linda! 🥳\nParabéns, Mari — você voou alto e aterrissou no seu sonho: comissária de bordo! 💙\nQue essa flash tattoo seja um lembrete de que teu céu é infinito. ☁️🌟\n\nCom carinho (e muita admiração),\nMatheus, Pietro e Beatriz ❤️", "Agora é só escolher o design da tua tattoo! 😄");
+          }
+        }
+        
+        // Anima fundo e ground mesmo em WIN
+        // (movimento já acontece na parte de desenho)
+      }
+      
+      // Atualiza (normal game ou antes do WIN)
+      if (state.running && !state.gameOver && !state.win) {
+        // física
+        plane.vy += plane.gravity * dt;
+        plane.vy = Math.min(plane.vy, plane.maxFall);
+        plane.y += plane.vy * dt;
+
+        // pipes andando
+        for (const p of pipes) p.x -= pipeCfg.speed * dt;
+
+        // spawn
+        const lastPipe = pipes[pipes.length - 1];
+        if (lastPipe && lastPipe.x < W - pipeCfg.spacing) {
+          spawnPipe(lastPipe.x + pipeCfg.spacing);
+        }
+
+        // remove pipes fora
+        while (pipes.length && pipes[0].x + pipeCfg.w < -20) pipes.shift();
+
+        // score quando passa
+        for (const p of pipes) {
+          if (!p.passed && p.x + pipeCfg.w < plane.x - plane.w/2) {
+            p.passed = true;
+            state.score += 1;
+            scoreEl.textContent = String(state.score);
+            
+            // Verifica se atingiu 15 pontos (WIN)
+            if (state.score >= state.winScore && !state.win) {
+              state.win = true;
+              state.running = false;
+              state.gameOver = false;
+              state.winPhase = "confetti";
+              state.winTimer = 0;
+              
+              // Inicia confetti
+              const colors = ["#ff6b6b", "#4ecdc4", "#ffe66d", "#95e1d3", "#f38181", "#aa96da"];
+              for (let i = 0; i < 50; i++) {
+                confettiParticles.push({
+                  x: plane.x,
+                  y: plane.y,
+                  vx: rand(-180, 180),
+                  vy: rand(-200, -100),
+                  rot: rand(0, Math.PI * 2),
+                  color: colors[Math.floor(Math.random() * colors.length)],
+                  life: rand(1.5, 2.5)
+                });
+              }
+            }
+          }
+        }
+
+        // colisão (apenas se não estiver em WIN)
+        if (!state.win && checkCollision(W, H)) {
+          state.gameOver = true;
+          state.running = false;
+
+          if (state.score > state.best) {
+            state.best = state.score;
+            localStorage.setItem("flappy_plane_best", String(state.best));
+            bestEl.textContent = String(state.best);
+          }
+
+          // Sistema de tentativas
+          state.attemptsLeft -= 1;
+          attemptsEl.textContent = String(state.attemptsLeft);
+
+          if (state.attemptsLeft > 0) {
+            // Ainda tem tentativas - reset rápido
+            setTimeout(() => {
+              resetRound();
+            }, 500);
+          } else {
+            // Acabaram as tentativas
+            state.mode = "gameover";
+            showOverlay("Acabaram as tentativas! 💥", `Você fez ${state.score} ponto(s). Clique em "Iniciar" para uma nova sessão!`, "Dica: tenta manter o avião no meio da tela.");
+          }
+        }
+      } else {
+        // animação idle (avião flutuando) antes de começar
+        if (!state.gameOver) {
+          plane.y += Math.sin(state.t * 2.6) * 0.25;
+        }
+      }
+
+      // Atualiza intro se ativa
+      if (intro.active) {
+        updateIntro(W, H, dt);
+      }
+      
+      // Desenha
+      ctx.clearRect(0, 0, W, H);
+      
+      // Aplica câmera se intro ativa
+      if (intro.active) {
+        ctx.save();
+        ctx.translate(0, -intro.cameraY);
+      }
+      
+      drawBackground(W, H);
+      
+      // Se intro ativa, desenha elementos da intro
+      if (intro.active) {
+        const groundY = H - ground.h;
+        
+        // Desenha ground (já dentro do translate da câmera)
+        drawGround(W, H, dt);
+        
+        // Desenha personagens
+        characters.forEach(char => {
+          drawCharacter(char, W, H);
+        });
+        
+        // Desenha balões de conversa
+        drawTalkBubbles(W, H);
+        
+        // Desenha máquina arcade
+        drawArcadeMachine(W, H);
+        
+        // Desenha token
+        drawToken();
+        
+        ctx.restore();
+        
+        // Desenha partículas (fora do translate da câmera)
+        drawIntroParticles(W, H);
+        
+        // Texto "PARTIDA INICIADA" durante panUp (fora do translate)
+        if (intro.phase === "panUp" && intro.phaseTimer > 0.3) {
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, (intro.phaseTimer - 0.3) / 0.3);
+          ctx.fillStyle = "rgba(0,0,0,.8)";
+          ctx.font = "800 20px system-ui";
+          ctx.textAlign = "center";
+          ctx.fillText("PARTIDA INICIADA", W/2, H * 0.4);
+          ctx.fillText("10 TENTATIVAS", W/2, H * 0.4 + 25);
+          ctx.restore();
+        }
+      } else {
+        // Jogo normal
+        // Desenha pipes apenas se não estiver em WIN
+        if (!state.win) {
+          drawPipes(W, H);
+        }
+        
+        drawGround(W, H, dt);
+        
+        // Desenha avião apenas se não estiver na fase parachute
+        if (state.winPhase !== "parachute" && state.winPhase !== "landed") {
+          drawPlane();
+        }
+        
+        // Desenha confetti durante fase confetti
+        if (state.winPhase === "confetti" || state.winPhase === "parachute") {
+          drawConfetti(W, H, dt);
+        }
+        
+        // Desenha Bruna caindo com paraquedas
+        if (state.winPhase === "parachute" || state.winPhase === "landed") {
+          drawBrunaDrop(W, H);
+        }
+
+        if (!state.startedOnce && !state.sessionLocked) {
+          drawFlashText(W, H, "Toque na tela para começar");
+        }
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    // inicia
+    resetGame();
+    state.sessionLocked = true;
+    state.mode = "intro";
+    state.attemptsLeft = state.attemptsMax;
+    attemptsEl.textContent = String(state.attemptsLeft);
+    showOverlay("Flappy Plane ✈️", "Bem-vinda, Mari! Clique em 'Iniciar' para começar sua aventura!", "Você terá 10 tentativas para conquistar sua flash tattoo!");
+    requestAnimationFrame(loop);
+
+    // evita scroll/zoom quando tocar na tela em alguns navegadores
+    document.addEventListener("gesturestart", (e) => e.preventDefault());
+  </script>
+</body>
+</html>
